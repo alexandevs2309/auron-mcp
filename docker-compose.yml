@@ -1,0 +1,23 @@
+services:
+  auron-mcp:
+    build: .
+    environment:
+      AURON_MCP_NAME: ${AURON_MCP_NAME:-AURON MCP}
+      AURON_MCP_TRANSPORT: ${AURON_MCP_TRANSPORT:-streamable-http}
+      AURON_MCP_READ_ONLY: ${AURON_MCP_READ_ONLY:-true}
+      AURON_ADAPTER: ${AURON_ADAPTER:-mock}
+      AURON_API_BASE_URL: ${AURON_API_BASE_URL:-}
+      AURON_API_TOKEN: ${AURON_API_TOKEN:-}
+      AURON_MCP_SESSION_PATH: ${AURON_MCP_SESSION_PATH:-/app/session.json}
+      AURON_AUDIT_LOG_PATH: ${AURON_AUDIT_LOG_PATH:-/var/log/auron-mcp/audit.jsonl}
+      AURON_RATE_LIMIT_MAX_CALLS: ${AURON_RATE_LIMIT_MAX_CALLS:-30}
+      AURON_RATE_LIMIT_WINDOW_SECONDS: ${AURON_RATE_LIMIT_WINDOW_SECONDS:-60}
+    volumes:
+      - auron-mcp-audit:/var/log/auron-mcp
+      - auron-mcp-session:/app
+    ports:
+      - "8000:8000"
+
+volumes:
+  auron-mcp-audit:
+  auron-mcp-session:
