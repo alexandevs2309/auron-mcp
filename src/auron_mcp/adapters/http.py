@@ -151,6 +151,20 @@ class HttpAuronAdapter(AuronAdapter):
         )
         return self._decode(response)
 
+    # --- fiscal reads (M3: ECF / NCF) ------------------------------------
+    async def ncf_sequences(self) -> dict[str, Any]:
+        return await self._get("/api/pos/ncf-sequences/")
+
+    async def fiscal_summary(self) -> dict[str, Any]:
+        return await self._get("/api/pos/summary/daily/")
+
+    async def sale_fiscal_detail(self, sale_id: str) -> dict[str, Any]:
+        return await self._get(f"/api/pos/sales/{sale_id}/")
+
+    async def void_sale(self, sale_id: str) -> dict[str, Any]:
+        response = await self._patch(f"/api/pos/sales/{sale_id}/", {"status": "void"})
+        return self._decode(response)
+
     # --- plumbing --------------------------------------------------------
     async def _get(self, path: str, **params: Any) -> dict[str, Any]:
         try:

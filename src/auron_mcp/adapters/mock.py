@@ -128,3 +128,65 @@ class MockAuronAdapter(AuronAdapter):
 
     async def system_health(self) -> dict[str, Any]:
         return {"status": "ok", "adapter": "mock", "service": "auron-mcp"}
+
+    # --- fiscal reads (M3: ECF / NCF) ------------------------------------
+    async def ncf_sequences(self) -> dict[str, Any]:
+        return {
+            "sequences": [
+                {
+                    "id": "ncf-1",
+                    "type": "02",
+                    "prefix": "B",
+                    "start_sequence": 1,
+                    "end_sequence": 50000,
+                    "current_sequence": 1,
+                    "expiration_date": "2027-12-31",
+                    "is_active": True,
+                    "remaining": 50000,
+                    "exhausted": False,
+                    "expired": False,
+                },
+            ],
+            "total_remaining": 50000,
+            "sequences_near_exhaustion": 0,
+            "sequences_expired": 0,
+            "status": "mock",
+        }
+
+    async def fiscal_summary(self) -> dict[str, Any]:
+        return {
+            "date": "2026-08-17",
+            "total_sales": 0,
+            "total_revenue": "0.00",
+            "sales_by_ncf_type": {},
+            "total_itbis": "0.00",
+            "total_propina": "0.00",
+            "voided_sales": 0,
+            "refunded_sales": 0,
+            "status": "mock",
+        }
+
+    async def sale_fiscal_detail(self, sale_id: str) -> dict[str, Any]:
+        return {
+            "sale_id": sale_id,
+            "ncf": "B0200000001",
+            "ncf_type": "02",
+            "rnc": "",
+            "company_name": "",
+            "date_time": "2026-08-17T10:00:00Z",
+            "subtotal": "0.00",
+            "itbis": "0.00",
+            "propina": "0.00",
+            "total": "0.00",
+            "status": "mock",
+            "payment_method": "cash",
+            "items": [],
+        }
+
+    async def void_sale(self, sale_id: str) -> dict[str, Any]:
+        return {
+            "sale_id": sale_id,
+            "status": "void",
+            "ncf": "B0200000001",
+            "message": "Sale voided (NCF remains consumed per DGII rules)",
+        }

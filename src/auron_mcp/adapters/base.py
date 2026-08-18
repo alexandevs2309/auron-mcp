@@ -29,9 +29,7 @@ class AuronAdapter(ABC):
         """POST /api/auth/cookie-refresh/ -> True when cookies rotated."""
 
     @abstractmethod
-    async def auth_login(
-        self, email: str, password: str, subdomain: str | None
-    ) -> dict[str, Any]:
+    async def auth_login(self, email: str, password: str, subdomain: str | None) -> dict[str, Any]:
         """POST /api/auth/login/ -> sets auth cookies."""
 
     @abstractmethod
@@ -115,3 +113,23 @@ class AuronAdapter(ABC):
         self, appointment_id: str, new_datetime: str
     ) -> dict[str, Any]:
         """POST /api/appointments/appointments/{id}/reschedule/."""
+
+    # --- fiscal reads (M3: ECF / NCF) ------------------------------------
+    # These read the backend's existing NCF sequences and sale fiscal data.
+    # DGII e-CF submission is NOT yet in the backend; when it is, the
+    # corresponding write methods (submit_ecf, ecf_status) will be added.
+    @abstractmethod
+    async def ncf_sequences(self) -> dict[str, Any]:
+        """GET /api/pos/ncf-sequences/ — list NCF sequences for the tenant."""
+
+    @abstractmethod
+    async def fiscal_summary(self) -> dict[str, Any]:
+        """GET /api/pos/summary/daily/ — today's fiscal summary (NCF types, totals)."""
+
+    @abstractmethod
+    async def sale_fiscal_detail(self, sale_id: str) -> dict[str, Any]:
+        """GET /api/pos/sales/{id}/ — sale detail with NCF, RNC, tax breakdown."""
+
+    @abstractmethod
+    async def void_sale(self, sale_id: str) -> dict[str, Any]:
+        """PATCH /api/pos/sales/{id}/ — set status to void (NCF remains spent)."""

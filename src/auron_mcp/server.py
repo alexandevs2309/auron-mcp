@@ -322,6 +322,65 @@ async def auron_reschedule_appointment(
     )
 
 
+# --- fiscal tools (M3: ECF / NCF) ----------------------------------------
+
+
+@mcp.tool()
+async def auron_ncf_sequences(ctx: Context | None = None) -> dict:
+    """List NCF sequences for the authenticated AURON tenant: type, range,
+    remaining count, exhaustion and expiry status.
+    """
+    return await _safe(_with_context(tools.ncf_sequences, ctx))
+
+
+@mcp.tool()
+async def auron_fiscal_summary(ctx: Context | None = None) -> dict:
+    """Today's fiscal summary for the authenticated AURON tenant: sales count
+    by NCF type, ITBIS and Propina totals, voided/refunded counts.
+    """
+    return await _safe(_with_context(tools.fiscal_summary, ctx))
+
+
+@mcp.tool()
+async def auron_sale_fiscal_detail(sale_id: str, ctx: Context | None = None) -> dict:
+    """Fiscal detail of a single sale: NCF number, RNC, tax breakdown (ITBIS,
+    Propina), line items and payment method.
+    """
+    return await _safe(_with_context(lambda c: tools.sale_fiscal_detail(c, sale_id), ctx))
+
+
+@mcp.tool()
+async def auron_preview_void_sale(sale_id: str, ctx: Context | None = None) -> dict:
+    """Phase 1 of sale voiding: describe the effect and obtain a single-use
+    confirmation_token for `auron_void_sale`. No data is changed.
+    """
+    return await _safe(_with_context(lambda c: tools.preview_void_sale(c, sale_id), ctx))
+
+
+@mcp.tool()
+async def auron_void_sale(
+    sale_id: str,
+    idempotency_key: str,
+    confirmation_token: str,
+    ctx: Context | None = None,
+) -> dict:
+    """Void a sale (phase 2). Requires the confirmation_token from
+    `auron_preview_void_sale` and an idempotency_key. The NCF remains
+    consumed per DGII rules — it is not recycled.
+    """
+    return await _safe(
+        _with_context(
+            lambda c: tools.void_sale(
+                c,
+                sale_id,
+                idempotency_key=idempotency_key,
+                confirmation_token=confirmation_token,
+            ),
+            ctx,
+        )
+    )
+
+
 @mcp.resource("auron://context/current")
 async def current_context() -> str:
     """Describe the current authenticated AURON scope."""

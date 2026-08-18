@@ -59,9 +59,13 @@
 
 ## M3 — Ecosystem
 
-- [ ] AURON ECF
-- [ ] Hospitality
-- [ ] Future products
+- [x] AURON ECF — fiscal reads wired (`auron_ncf_sequences`, `auron_fiscal_summary`,
+      `auron_sale_fiscal_detail`), NCF lifecycle mapped, `ecf.py` domain types
+      (`NCFInfo`, `FiscalDaySummary`, `SaleFiscalDetail`, `ECFTemplate`,
+      `ECFSubmissionResult`). DGII e-CF submission blocked on backend
+      implementation; interfaces prepared.
+- [ ] Hospitality — deferred until the backend implements the module.
+- [ ] Future products — deferred.
 
 ## M4 — Controlled writes
 
@@ -82,6 +86,13 @@
       `AURON_MCP_READ_ONLY` is on — the shipped default)
 - [x] Rollback/compensation strategies (best-effort `compensation` hook in the
       write boundary, exercised by `tests/test_writes.py`)
+- [x] Audit sink abstraction (`AuditSink` ABC in `audit/logger.py`;
+      `AuditLogger` = current JSONL+stdout; `CentralAuditSink` = stub ready
+      for `POST /api/audit/logs/create/` when the backend drops the
+      `IsSuperAdmin` requirement)
+- [x] Rate-limit backend abstraction (`RateLimitBackend` ABC in `ratelimit.py`;
+      `InMemoryBackend` = current per-process; `RedisBackend` = stub ready
+      for Redis sorted-set sliding window when the deployment has Redis)
 - [ ] Replace JSONL audit sink with AURON's centralized audit/event pipeline —
       deferred: backend `POST /audit/logs/create/` requires `IsSuperAdmin`,
       which no MCP operator identity has; needs a backend change to expose a
@@ -92,6 +103,8 @@
       and expired tokens, payload-tamper mismatch, idempotent replay, failed
       writes don't poison idempotency, read-only guard, role boundaries,
       compensation, cashier write access)
+- [x] Fiscal write: void sale (`auron_preview_void_sale` / `auron_void_sale` —
+      two-phase confirmation, NCF remains consumed per DGII rules)
 
 ## M5 — Agent workflows
 

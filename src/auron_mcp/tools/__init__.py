@@ -17,9 +17,11 @@ from ..policy.roles import (
     CLIENTS_READ,
     EMPLOYEES_LIST_READ,
     EMPLOYEES_READ,
+    FISCAL_READ,
     INVENTORY_READ,
     PRODUCTS_READ,
     SALES_READ,
+    SALES_VOID,
     SERVICES_READ,
     SYSTEM_READ,
 )
@@ -479,4 +481,76 @@ class AuronTools:
             operation="reschedule_appointment",
             payload=payload,
             idempotency_key=idempotency_key,
+        )
+
+    # --- fiscal reads (M3: ECF / NCF) ------------------------------------
+    async def ncf_sequences(self, ctx: RequestContext) -> dict:
+        """List NCF sequences for the authenticated tenant: type, range,
+        remaining count, exhaustion and expiry status."""
+        return await self._call(ctx, "ncf_sequences.read", FISCAL_READ, self.adapter.ncf_sequences)
+
+    async def fiscal_summary(self, ctx: RequestContext) -> dict:
+        """Today's fiscal summary: sales count by NCF type, ITBIS and
+        Propina totals, voided/refunded counts."""
+        return await self._call(
+            ctx, "fiscal_summary.read", FISCAL_READ, self.adapter.fiscal_summary
+        )
+
+    async def sale_fiscal_detail(self, ctx: RequestContext, sale_id: str) -> dict:
+        """Fiscal detail of a single sale: NCF, RNC, tax breakdown, items."""
+        return await self._call(
+            ctx,
+            "sales.fiscal_detail.read",
+            SALES_READ,
+            lambda: self.adapter.sale_fiscal_detail(sale_id),
+        )
+
+    # --- fiscal writes (M3: void sale) ------------------------------------
+    async def preview_void_sale(self, ctx: RequestContext, sale_id: str) -> dict:
+        """Phase 1 of void: preview effect + single-use confirmation token."""
+
+        async def _preview():
+            payload = {"sale_id": sale_id}
+            token = self.confirmations.issue("void_sale", payload)
+            return {
+                "operation": "void_sale",
+                "sale_id": sale_id,
+                "effects": "Sets sale status to void; NCF remains consumed per DGII rules",
+                "confirmation_token": token,
+                "ttl_seconds": self.confirmations.ttl_seconds,
+                "payload_hash": payload_hash(payload),
+            }
+
+        return await self._write(
+            ctx,
+            "sales.void.preview",
+            SALES_VOID,
+            _preview,
+            operation="void_sale",
+            payload={"sale_id": sale_id},
+        )
+
+    async def void_sale(
+        self,
+        ctx: RequestContext,
+        sale_id: str,
+        *,
+        idempotency_key: str,
+        confirmation_token: str,
+    ) -> dict:
+        """Phase 2 of void: requires token from preview_void_sale."""
+
+        async def _void():
+            return await self.adapter.void_sale(sale_id)
+
+        payload = {"sale_id": sale_id}
+        return await self._write(
+            ctx,
+            "sales.void",
+            SALES_VOID,
+            _void,
+            operation="void_sale",
+            payload=payload,
+            idempotency_key=idempotency_key,
+            confirmation_token=confirmation_token,
         )

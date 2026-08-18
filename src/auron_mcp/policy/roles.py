@@ -20,6 +20,10 @@ BRANCHES_READ = "settings_api.view_branch"
 PRODUCTS_READ = "inventory_api.view_product"
 SYSTEM_READ = "system:read"
 
+# Fiscal reads (M3: ECF / NCF). NCF sequence reads require the NCF-specific
+# permission; sale fiscal detail reuses SALES_READ.
+FISCAL_READ = "pos_api.view_ncfsequence"
+
 # Controlled writes (M4). Codename for the backend AppointmentViewSet /
 # Appointment.Meta.permissions; AURON's own TenantPermissionByAction remains the
 # ground truth — the MCP fails closed when AURON denies.
@@ -28,18 +32,8 @@ APPOINTMENTS_CHANGE = "appointments_api.change_appointment"
 APPOINTMENTS_CANCEL = "appointments_api.cancel_appointment"
 APPOINTMENTS_DELETE = "appointments_api.delete_appointment"
 
-WRITE_PERMISSIONS = frozenset(
-    {
-        APPOINTMENTS_CREATE,
-        APPOINTMENTS_CHANGE,
-        APPOINTMENTS_CANCEL,
-        APPOINTMENTS_DELETE,
-    }
-)
-
-FRONT_WRITE_PERMISSIONS = frozenset(
-    {APPOINTMENTS_CREATE, APPOINTMENTS_CHANGE, APPOINTMENTS_CANCEL}
-)
+# Fiscal write: voiding a sale (status -> void; NCF remains consumed).
+SALES_VOID = "pos_api.change_sale"
 
 READ_PERMISSIONS = frozenset(
     {
@@ -54,8 +48,21 @@ READ_PERMISSIONS = frozenset(
         BRANCHES_READ,
         PRODUCTS_READ,
         SYSTEM_READ,
+        FISCAL_READ,
     }
 )
+
+WRITE_PERMISSIONS = frozenset(
+    {
+        APPOINTMENTS_CREATE,
+        APPOINTMENTS_CHANGE,
+        APPOINTMENTS_CANCEL,
+        APPOINTMENTS_DELETE,
+        SALES_VOID,
+    }
+)
+
+FRONT_WRITE_PERMISSIONS = frozenset({APPOINTMENTS_CREATE, APPOINTMENTS_CHANGE, APPOINTMENTS_CANCEL})
 
 _CATALOG_READ = frozenset(
     {SALES_READ, APPOINTMENTS_READ, CLIENTS_READ, INVENTORY_READ, SYSTEM_READ}
@@ -71,6 +78,7 @@ _FRONT_READ = frozenset(
         BRANCHES_READ,
         PRODUCTS_READ,
         SYSTEM_READ,
+        FISCAL_READ,
     }
 )
 _PROFESSIONAL_READ = frozenset(
@@ -81,6 +89,7 @@ _PROFESSIONAL_READ = frozenset(
         EMPLOYEES_LIST_READ,
         BRANCHES_READ,
         SYSTEM_READ,
+        FISCAL_READ,
     }
 )
 
@@ -104,10 +113,19 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             EMPLOYEES_LIST_READ,
             BRANCHES_READ,
             SYSTEM_READ,
+            FISCAL_READ,
         }
     ),
     "UTILITY": frozenset(
-        {APPOINTMENTS_READ, CLIENTS_READ, SERVICES_READ, EMPLOYEES_LIST_READ, BRANCHES_READ, SYSTEM_READ}
+        {
+            APPOINTMENTS_READ,
+            CLIENTS_READ,
+            SERVICES_READ,
+            EMPLOYEES_LIST_READ,
+            BRANCHES_READ,
+            SYSTEM_READ,
+            FISCAL_READ,
+        }
     ),
 }
 
