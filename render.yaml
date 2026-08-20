@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: auron-mcp
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    envVars:
+      - key: AURON_MCP_TRANSPORT
+        value: streamable-http
+      - key: AURON_MCP_HTTP_HOST
+        value: 0.0.0.0
+      - key: AURON_MCP_HTTP_PORT
+        value: 8080
+      - key: AURON_ADAPTER
+        value: http
+      - key: AURON_API_BASE_URL
+        value: https://api-peluqueria-p25h.onrender.com
+      - key: AURON_MCP_NAME
+        value: AURON MCP
+      - key: AURON_MCP_READ_ONLY
+        value: "false"
+      - key: AURON_MCP_OAUTH_ENABLED
+        value: "true"
+      - key: AURON_MCP_SESSION_PATH
+        value: /tmp/auron-mcp/session.json
+      - key: AURON_RATE_LIMIT_MAX_CALLS
+        value: "60"
+      - key: AURON_RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: AURON_HTTP_TIMEOUT_SECONDS
+        value: "30"
+      - key: AURON_IDENTITY_CACHE_TTL
+        value: "300"
