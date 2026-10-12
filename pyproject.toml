@@ -1,7 +1,7 @@
 [project]
 name = "auron-mcp"
 version = "1.0.0"
-description = "Read-only MCP gateway for the AURON ecosystem (AURON MCP v1)"
+description = "MCP gateway for the AURON ecosystem (AURON MCP v1). Read-only data access and controlled write operations (appointments, sales voiding) with two-phase confirmation and idempotency."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

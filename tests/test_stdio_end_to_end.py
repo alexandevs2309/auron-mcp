@@ -6,14 +6,30 @@ that the decorated server actually works over the wire, not just in-process.
 """
 
 import os
+import sys
 
 os.environ["AURON_ADAPTER"] = "mock"
 
 import pytest
 from mcp import client
 
-BIN = os.path.join(os.path.dirname(__file__), "..", ".venv", "bin", "auron-mcp")
-SERVER_ARGS = [os.path.abspath(BIN)]
+
+
+if sys.platform == "win32":
+    SERVER_ARGS = [
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "auron-mcp.exe",
+        )
+    ]
+else:
+    BIN = os.path.join(
+        os.path.dirname(__file__), "..", ".venv", "bin", "auron-mcp"
+    )
+    SERVER_ARGS = [os.path.abspath(BIN)]
+
+
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 

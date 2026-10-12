@@ -5,6 +5,7 @@ from typing import Any
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.context import Context
+from mcp.types import ToolAnnotations
 
 from .adapters.base import AdapterError
 from .adapters.http import HttpAuronAdapter
@@ -113,31 +114,31 @@ async def _with_context(fn, mcp_ctx: Context | None = None):
     return await fn(ctx)
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_sales_summary(ctx: Context | None = None) -> dict:
     """Read today's sales summary for the authenticated AURON tenant."""
     return await _safe(_with_context(tools.sales_summary, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_appointments_today(ctx: Context | None = None) -> dict:
     """Read today's appointments for the authenticated AURON tenant."""
     return await _safe(_with_context(tools.appointments_today, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_clients_search(query: str, limit: int = 20, ctx: Context | None = None) -> dict:
     """Search clients inside the authenticated AURON tenant (max 100 results)."""
     return await _safe(_with_context(tools.clients_search_factory(query, limit), ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_inventory_alerts(ctx: Context | None = None) -> dict:
     """Read low-stock inventory alerts for the authenticated AURON tenant."""
     return await _safe(_with_context(tools.inventory_alerts, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_employee_performance(
     employee_id: str | None = None, ctx: Context | None = None
 ) -> dict:
@@ -145,43 +146,43 @@ async def auron_employee_performance(
     return await _safe(_with_context(tools.employee_performance_factory(employee_id), ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_system_health(ctx: Context | None = None) -> dict:
     """Read AURON API and MCP health."""
     return await _safe(_with_context(tools.system_health, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_services_list(ctx: Context | None = None) -> dict:
     """List the services offered by the authenticated AURON tenant."""
     return await _safe(_with_context(tools.services_list, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_employees_list(ctx: Context | None = None) -> dict:
     """List employees of the authenticated AURON tenant."""
     return await _safe(_with_context(tools.employees_list, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_branches_list(ctx: Context | None = None) -> dict:
     """List branches of the authenticated AURON tenant."""
     return await _safe(_with_context(tools.branches_list, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_products_list(ctx: Context | None = None) -> dict:
     """List products in the authenticated AURON tenant's inventory."""
     return await _safe(_with_context(tools.products_list, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_dashboard_stats(ctx: Context | None = None) -> dict:
     """Read dashboard statistics for the authenticated AURON tenant."""
     return await _safe(_with_context(tools.dashboard_stats, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_daily_review(ctx: Context | None = None) -> dict:
     """Compound daily business review for the authenticated AURON tenant.
 
@@ -191,7 +192,7 @@ async def auron_daily_review(ctx: Context | None = None) -> dict:
     return await _safe(_with_context(tools.daily_review, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_inventory_review(ctx: Context | None = None) -> dict:
     """Inventory review for the authenticated AURON tenant.
 
@@ -200,7 +201,7 @@ async def auron_inventory_review(ctx: Context | None = None) -> dict:
     return await _safe(_with_context(tools.inventory_review, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_revenue_analysis(ctx: Context | None = None) -> dict:
     """Revenue analysis for the authenticated AURON tenant.
 
@@ -209,7 +210,7 @@ async def auron_revenue_analysis(ctx: Context | None = None) -> dict:
     return await _safe(_with_context(tools.revenue_analysis, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_employee_performance_review(ctx: Context | None = None) -> dict:
     """Employee review for the authenticated AURON tenant.
 
@@ -218,7 +219,7 @@ async def auron_employee_performance_review(ctx: Context | None = None) -> dict:
     return await _safe(_with_context(tools.employee_performance_review, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_preview_create_appointment(payload: dict, ctx: Context | None = None) -> dict:
     """Phase 1 of appointment creation: describe the intended effect and obtain
     a single-use confirmation_token to execute `auron_create_appointment`.
@@ -227,7 +228,7 @@ async def auron_preview_create_appointment(payload: dict, ctx: Context | None = 
     return await _safe(_with_context(lambda c: tools.preview_create_appointment(c, payload), ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_create_appointment(
     payload: dict,
     idempotency_key: str,
@@ -248,7 +249,7 @@ async def auron_create_appointment(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_preview_cancel_appointment(appointment_id: str, ctx: Context | None = None) -> dict:
     """Phase 1 of cancellation: preview the effect and obtain a single-use
     confirmation_token for `auron_cancel_appointment`. No data is changed.
@@ -258,7 +259,7 @@ async def auron_preview_cancel_appointment(appointment_id: str, ctx: Context | N
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_cancel_appointment(
     appointment_id: str,
     idempotency_key: str,
@@ -282,7 +283,7 @@ async def auron_cancel_appointment(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_update_appointment(
     appointment_id: str,
     changes: dict,
@@ -302,7 +303,7 @@ async def auron_update_appointment(
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_reschedule_appointment(
     appointment_id: str,
     new_datetime: str,
@@ -325,7 +326,7 @@ async def auron_reschedule_appointment(
 # --- fiscal tools (M3: ECF / NCF) ----------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_ncf_sequences(ctx: Context | None = None) -> dict:
     """List NCF sequences for the authenticated AURON tenant: type, range,
     remaining count, exhaustion and expiry status.
@@ -333,7 +334,7 @@ async def auron_ncf_sequences(ctx: Context | None = None) -> dict:
     return await _safe(_with_context(tools.ncf_sequences, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_fiscal_summary(ctx: Context | None = None) -> dict:
     """Today's fiscal summary for the authenticated AURON tenant: sales count
     by NCF type, ITBIS and Propina totals, voided/refunded counts.
@@ -341,7 +342,7 @@ async def auron_fiscal_summary(ctx: Context | None = None) -> dict:
     return await _safe(_with_context(tools.fiscal_summary, ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_sale_fiscal_detail(sale_id: str, ctx: Context | None = None) -> dict:
     """Fiscal detail of a single sale: NCF number, RNC, tax breakdown (ITBIS,
     Propina), line items and payment method.
@@ -349,7 +350,7 @@ async def auron_sale_fiscal_detail(sale_id: str, ctx: Context | None = None) -> 
     return await _safe(_with_context(lambda c: tools.sale_fiscal_detail(c, sale_id), ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_preview_void_sale(sale_id: str, ctx: Context | None = None) -> dict:
     """Phase 1 of sale voiding: describe the effect and obtain a single-use
     confirmation_token for `auron_void_sale`. No data is changed.
@@ -357,7 +358,7 @@ async def auron_preview_void_sale(sale_id: str, ctx: Context | None = None) -> d
     return await _safe(_with_context(lambda c: tools.preview_void_sale(c, sale_id), ctx))
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True))
 async def auron_void_sale(
     sale_id: str,
     idempotency_key: str,
