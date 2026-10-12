@@ -1,5 +1,7 @@
 # AURON MCP — v1 (read-only, multi-tenant, production-lean)
 
+[![Puntuación M8ven](https://m8ven.ai/badge/mcp/alexandevs2309-auron-mcp-j6bwmi?v=02a3bad47c276bec9efeedd001932591)](https://m8ven.ai/mcp/alexandevs2309-auron-mcp-j6bwmi?s=readme)
+
 MCP gateway between AI hosts/agents and the **AURON Suite** backend
 (`api_peluqueria`). Identity, tenancy, and RBAC are resolved from the real
 AURON REST API — the model can never steer them.
