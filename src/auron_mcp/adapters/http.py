@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import httpx2 as httpx
@@ -62,7 +63,9 @@ class HttpAuronAdapter(AuronAdapter):
     async def auth_login(self, email: str, password: str, subdomain: str | None) -> dict[str, Any]:
         body: dict[str, Any] = {"email": email, "password": password}
         if subdomain:
-            body["subdomain"] = subdomain
+            # LoginSerializer reads `tenant` or its legacy alias
+            # `tenant_subdomain`; the old `subdomain` key was ignored.
+            body["tenant_subdomain"] = subdomain
         response = await self._post("/api/auth/login/", body)
         if response.status_code == 200:
             return response.json()
@@ -145,8 +148,10 @@ class HttpAuronAdapter(AuronAdapter):
     async def reschedule_appointment(
         self, appointment_id: str, new_datetime: str
     ) -> dict[str, Any]:
+        # Standalone view at /api/appointments/<pk>/reschedule/ (NOT a ViewSet
+        # action, so there is no duplicated `appointments/` path segment).
         response = await self._post(
-            f"/api/appointments/appointments/{appointment_id}/reschedule/",
+            f"/api/appointments/{appointment_id}/reschedule/",
             {"new_datetime": new_datetime},
         )
         return self._decode(response)
@@ -156,7 +161,30 @@ class HttpAuronAdapter(AuronAdapter):
         return await self._get("/api/pos/ncf-sequences/")
 
     async def fiscal_summary(self) -> dict[str, Any]:
-        return await self._get("/api/pos/summary/daily/")
+        # Real contract: GET /api/reports/fiscal/ -> {summary, ncf_by_type}.
+        # Map it to the public tool shape instead of leaking the backend
+        # structure. Propina is not exposed by the backend, so it is omitted
+        # rather than reported as a fake 0.00.
+        payload = await self._get("/api/reports/fiscal/")
+        summary = payload.get("summary") or {}
+        taxable_total = Decimal(str(summary.get("taxable_sales_total", 0)))
+        exempt_total = Decimal(str(summary.get("exempt_sales_total", 0)))
+        itbis = Decimal(str(summary.get("itbis_amount", 0)))
+        by_type = {
+            str(item.get("ncf_type") or "unknown"): int(item.get("count", 0))
+            for item in (payload.get("ncf_by_type") or [])
+        }
+        return {
+            "period": "all_time",
+            "total_sales": int(summary.get("taxable_sales_count", 0))
+            + int(summary.get("exempt_sales_count", 0)),
+            "total_revenue": str((taxable_total + exempt_total).quantize(Decimal("0.01"))),
+            "sales_by_ncf_type": by_type,
+            "total_itbis": str(itbis.quantize(Decimal("0.01"))),
+            "voided_sales": int(summary.get("voided_count", 0)),
+            "refunded_sales": int(summary.get("refunded_count", 0)),
+            "status": "ok",
+        }
 
     async def sale_fiscal_detail(self, sale_id: str) -> dict[str, Any]:
         return await self._get(f"/api/pos/sales/{sale_id}/")

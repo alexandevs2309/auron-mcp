@@ -276,6 +276,26 @@ class BearerTokenMiddleware:
         await self.app(scope, receive, send)
 
 
+class HealthEndpointMiddleware:
+    """Public ``GET /healthz`` for load balancers and container orchestrators.
+
+    It is installed OUTSIDE the OAuth/bearer/spec-validation stack and returns
+    only static metadata: no tenant, identity, tokens or backend data.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or scope.get("path") != "/healthz":
+            await self.app(scope, receive, send)
+            return
+        if scope["method"].upper() != "GET":
+            await _send_response(send, 405, {"error": "Method Not Allowed"})
+            return
+        await _send_response(send, 200, {"status": "ok", "service": "auron-mcp"})
+
+
 class AuthChallengeMiddleware:
     """Add the RFC 6750 ``scope`` parameter to ``WWW-Authenticate`` challenges.
 
@@ -371,6 +391,7 @@ def build_app(
     wrapped = StreamableHTTPValidationMiddleware(wrapped)
     if settings.http_bearer_token and token_verifier is None:
         wrapped = BearerTokenMiddleware(wrapped, settings.http_bearer_token)
+    wrapped = HealthEndpointMiddleware(wrapped)
     return wrapped
 
 

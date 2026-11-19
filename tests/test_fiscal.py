@@ -64,10 +64,11 @@ async def test_ncf_sequences_returns_mock_data(auth_admin):
 async def test_fiscal_summary_returns_mock_data(auth_admin):
     result = await server.auron_fiscal_summary()
     assert result["status"] == "mock"
-    assert result["date"] == "2026-08-17"
+    assert result["period"] == "all_time"
     assert result["total_sales"] == 0
     assert result["total_itbis"] == "0.00"
-    assert result["total_propina"] == "0.00"
+    # The backend does not expose propina; the tool must not fabricate it.
+    assert "total_propina" not in result
 
 
 # --- Sale fiscal detail ---

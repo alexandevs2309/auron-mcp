@@ -13,8 +13,6 @@ os.environ["AURON_ADAPTER"] = "mock"
 import pytest
 from mcp import client
 
-
-
 if sys.platform == "win32":
     SERVER_ARGS = [
         os.path.join(

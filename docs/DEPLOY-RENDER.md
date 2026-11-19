@@ -34,7 +34,7 @@ En el dashboard de Render → tu servicio → **Environment** → agrega:
 ```
 AURON_API_BASE_URL=https://api-peluqueria-p25h.onrender.com
 AURON_API_TOKEN=tu-token-de-servicio-aqui
-AURON_MCP_READ_ONLY=false
+AURON_MCP_READ_ONLY=true   # cambiar a false solo tras revisar preview + confirmación
 AURON_MCP_OAUTH_ENABLED=true
 ```
 
@@ -97,4 +97,7 @@ barberías, necesitas OAuth PKCE:
 | `AURON_MCP_OAUTH_ENABLED` | `true` | Habilitar OAuth |
 | `AURON_RATE_LIMIT_MAX_CALLS` | `60` | Límite de llamadas |
 | `AURON_RATE_LIMIT_WINDOW_SECONDS` | `60` | Ventana del rate limit |
+| `AURON_REDIS_URL` | `rediss://...` | Estado compartido (rate limit, confirmaciones e idempotencia). Vacío = en memoria, una sola réplica |
+| `AURON_REDIS_ON_ERROR` | `closed` | Si Redis falla: `closed` rechaza lecturas; `open` las permite. Las escrituras siempre fallan cerrado |
+| `AURON_REDIS_TIMEOUT_SECONDS` | `1` | Timeout de conexión/socket a Redis |
 | `AURON_HTTP_TIMEOUT_SECONDS` | `30` | Timeout del backend |

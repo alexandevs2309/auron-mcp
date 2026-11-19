@@ -16,6 +16,37 @@ This stores AURON's httpOnly auth cookies in `~/.auron-mcp/session.json`
 refreshes them when the access token expires. Alternatively set a static
 `AURON_API_TOKEN` (Bearer) if you prefer a service account.
 
+### Una credencial por negocio (ADR-001)
+
+No existe una API key universal. Cada negocio inicia sesión con **su propio**
+usuario AURON: el tenant se deriva del token validado por `/api/auth/verify/`
+y `/api/tenants/current/`, nunca de un argumento del modelo ni de un header
+`X-Auron-Tenant`. Un host que intente actuar para otro negocio recibe 403 y
+queda registrado en la auditoría.
+
+En modo HTTP compartido, usa OAuth 2.1 / PKCE por host en vez de un
+`AURON_API_TOKEN` global. Rate limit, confirmaciones e idempotencia están
+prefijados con `tenant_id`. Con `AURON_REDIS_URL` definido, los tres se guardan
+en Redis (sorted set + Lua atómica para la ventana deslizante; GET/DEL atómico
+para tokens de confirmación) y varias réplicas comparten el estado. Sin esa
+variable todo sigue en memoria: usa una sola réplica.
+
+El proveedor OAuth de la SDK sigue en memoria. Si escalas a varias réplicas,
+configura **sticky sessions** en el balanceador para que el flujo de autorización
+empiece y termine en el mismo proceso; las credenciales AURON y el tenant no se
+almacenan en OAuth, se derivan de la sesión validada por la API.
+
+La clave Redis puede incluir contraseña (`rediss://:...@host:6380/1`): se
+redacta en logs y no se registra nunca. `AURON_REDIS_ON_ERROR=closed` (default)
+rechaza lecturas si Redis falla; las escrituras siempre fallan cerrado, sin
+importar esa variable. Instala el extra con `pip install "auron-mcp[redis]"`.
+
+La clave de Gemini (o del proveedor LLM) **no** se configura aquí: pertenece al
+backend y es por negocio. Cada tenant guarda la suya (BYOK) o contrata el modo
+`included` con cupo mensual mediante `PUT /api/mcp/ai-credential/`. La clave
+nunca se devuelve al frontend; solo una pista enmascarada. Ver
+`../../docs/ADR-001-mcp-multi-tenant-credentials.md`.
+
 ## opencode (local, stdio)
 
 Add an entry to `~/.config/opencode/opencode.jsonc` (global) or the project's

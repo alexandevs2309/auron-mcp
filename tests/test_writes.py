@@ -19,7 +19,7 @@ from auron_mcp.config import settings
 from auron_mcp.context import new_context, new_trace_id
 from auron_mcp.policy.roles import permissions_for_role
 from auron_mcp.tools import AuronTools
-from auron_mcp.writes import ConfirmationTokenStore
+from auron_mcp.writes import ConfirmationTokenStore, IdempotencyStore
 
 PAYLOAD = {
     "client": 1,
@@ -119,6 +119,22 @@ async def test_expired_confirmation_token_is_rejected():
     store = ConfirmationTokenStore(ttl_seconds=0)
     token = store.issue("create_appointment", {"a": 1})
     assert store.consume(token, "create_appointment", {"a": 1}) == "expired"
+
+
+def test_confirmation_token_is_bound_to_tenant():
+    """ADR-001: the same payload in another tenant cannot consume the token."""
+    store = ConfirmationTokenStore()
+    token = store.issue("void_sale", {"sale_id": "1"}, scope="tenant-a")
+    assert store.consume(token, "void_sale", {"sale_id": "1"}, scope="tenant-b") == "mismatch"
+    second = store.issue("void_sale", {"sale_id": "1"}, scope="tenant-a")
+    assert store.consume(second, "void_sale", {"sale_id": "1"}, scope="tenant-a") == "ok"
+
+
+def test_idempotency_is_bound_to_tenant():
+    store = IdempotencyStore()
+    store.put("key-shared", {"status": "ok"}, scope="tenant-a")
+    assert store.get("key-shared", scope="tenant-b") is None
+    assert store.get("key-shared", scope="tenant-a") == {"status": "ok"}
 
 
 @pytest.mark.asyncio

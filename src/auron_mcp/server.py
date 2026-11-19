@@ -14,11 +14,17 @@ from .audit import AuditLogger
 from .auth import IdentityProvider, IdentityUnavailableError
 from .config import settings
 from .context import new_context, new_trace_id
-from .errors import ConfirmationError, WriteDisabledError, normalize_error
+from .errors import (
+    ConfirmationError,
+    SharedStateUnavailableError,
+    WriteDisabledError,
+    normalize_error,
+)
 from .logging import logger
 from .policy import AuthorizationError, PolicyEngine
-from .ratelimit import RateLimiter, RateLimitError
+from .ratelimit import InMemoryBackend, RateLimiter, RateLimitError, RedisBackend
 from .tools import AuronTools
+from .writes import RedisConfirmationTokenStore, RedisIdempotencyStore
 
 _KNOWN_EXCEPTIONS = (
     AuthorizationError,
@@ -27,6 +33,7 @@ _KNOWN_EXCEPTIONS = (
     AdapterError,
     WriteDisabledError,
     ConfirmationError,
+    SharedStateUnavailableError,
 )
 
 
@@ -43,6 +50,41 @@ def build_adapter():
     return MockAuronAdapter()
 
 
+def build_rate_limiter() -> RateLimiter:
+    backend = (
+        RedisBackend(
+            settings.redis_url,
+            on_error=settings.redis_on_error,
+            timeout_seconds=settings.redis_timeout_seconds,
+        )
+        if settings.redis_url
+        else InMemoryBackend()
+    )
+    return RateLimiter(
+        max_calls=settings.rate_limit_max_calls,
+        window_seconds=settings.rate_limit_window_seconds,
+        backend=backend,
+    )
+
+
+def build_write_stores() -> tuple[Any | None, Any | None]:
+    """Redis-backed confirmation/idempotency stores when AURON_REDIS_URL is set."""
+    if not settings.redis_url:
+        return None, None
+    return (
+        RedisConfirmationTokenStore(
+            settings.redis_url,
+            ttl_seconds=settings.confirmation_ttl_seconds,
+            timeout_seconds=settings.redis_timeout_seconds,
+        ),
+        RedisIdempotencyStore(
+            settings.redis_url,
+            ttl_seconds=settings.idempotency_ttl_seconds,
+            timeout_seconds=settings.redis_timeout_seconds,
+        ),
+    )
+
+
 adapter = build_adapter()
 identity_provider = IdentityProvider(
     adapter,
@@ -51,11 +93,16 @@ identity_provider = IdentityProvider(
 )
 policy = PolicyEngine(allow_superuser_without_tenant=settings.allow_superuser_without_tenant)
 audit = AuditLogger(settings.audit_log_path or None)
-rate_limiter = RateLimiter(
-    max_calls=settings.rate_limit_max_calls,
-    window_seconds=settings.rate_limit_window_seconds,
+rate_limiter = build_rate_limiter()
+confirmations, idempotency = build_write_stores()
+tools = AuronTools(
+    adapter,
+    policy,
+    audit,
+    rate_limiter,
+    confirmations=confirmations,
+    idempotency=idempotency,
 )
-tools = AuronTools(adapter, policy, audit, rate_limiter)
 
 mcp = MCPServer(settings.name)
 
@@ -336,8 +383,9 @@ async def auron_ncf_sequences(ctx: Context | None = None) -> dict:
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_fiscal_summary(ctx: Context | None = None) -> dict:
-    """Today's fiscal summary for the authenticated AURON tenant: sales count
-    by NCF type, ITBIS and Propina totals, voided/refunded counts.
+    """Fiscal summary for the authenticated AURON tenant (accumulated, not
+    per-day): sales count by NCF type, taxable/exempt totals, ITBIS and
+    voided/refunded counts. Propina is not exposed by the backend.
     """
     return await _safe(_with_context(tools.fiscal_summary, ctx))
 

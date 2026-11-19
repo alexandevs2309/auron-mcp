@@ -18,7 +18,7 @@ services:
       - key: AURON_MCP_NAME
         value: AURON MCP
       - key: AURON_MCP_READ_ONLY
-        value: "false"
+        value: "true"
       - key: AURON_MCP_OAUTH_ENABLED
         value: "true"
       - key: AURON_MCP_SESSION_PATH
@@ -27,6 +27,12 @@ services:
         value: "60"
       - key: AURON_RATE_LIMIT_WINDOW_SECONDS
         value: "60"
+      - key: AURON_REDIS_URL
+        sync: false  # rediss://... configurado en el dashboard; contiene credenciales
+      - key: AURON_REDIS_ON_ERROR
+        value: "closed"
+      - key: AURON_REDIS_TIMEOUT_SECONDS
+        value: "1"
       - key: AURON_HTTP_TIMEOUT_SECONDS
         value: "30"
       - key: AURON_IDENTITY_CACHE_TTL
