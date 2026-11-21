@@ -31,10 +31,14 @@ en Redis (sorted set + Lua atómica para la ventana deslizante; GET/DEL atómico
 para tokens de confirmación) y varias réplicas comparten el estado. Sin esa
 variable todo sigue en memoria: usa una sola réplica.
 
-El proveedor OAuth de la SDK sigue en memoria. Si escalas a varias réplicas,
-configura **sticky sessions** en el balanceador para que el flujo de autorización
-empiece y termine en el mismo proceso; las credenciales AURON y el tenant no se
-almacenan en OAuth, se derivan de la sesión validada por la API.
+El proveedor OAuth también respeta `AURON_REDIS_URL`: con Redis, los códigos de
+autorización y los tokens de acceso/refresco se comparten entre réplicas; el
+canje usa GET/DEL atómico (un código solo se puede canjear una vez) y cualquier
+fallo de Redis deniega la petición sin filtrar la URL de conexión. Sin Redis,
+el proveedor en memoria exige **sticky sessions** en el balanceador. El `sub`
+de OAuth se deriva del `client_id` (nunca un subject fijo compartido); las
+credenciales AURON y el tenant no se almacenan en OAuth, se derivan de la sesión
+validada por la API.
 
 La clave Redis puede incluir contraseña (`rediss://:...@host:6380/1`): se
 redacta en logs y no se registra nunca. `AURON_REDIS_ON_ERROR=closed` (default)

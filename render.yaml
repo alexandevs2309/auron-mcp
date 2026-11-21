@@ -21,6 +21,17 @@ services:
         value: "true"
       - key: AURON_MCP_OAUTH_ENABLED
         value: "true"
+      - key: AURON_MCP_OAUTH_CLIENT_SECRET
+        # {env:AURON_MCP_OAUTH_CLIENT_SECRET}: inyectar desde el dashboard de
+        # Render (sync: false). Nunca copiar el valor real en este archivo.
+        sync: false
+      - key: AURON_MCP_OAUTH_ISSUER_URL
+        # {env:AURON_MCP_PUBLIC_URL}: definir AURON_MCP_PUBLIC_URL en Render.
+        # Sin este valor el issuer sería http://127.0.0.1:8765.
+        sync: false
+      - key: AURON_MCP_OAUTH_RESOURCE_URL
+        # Igual que la URL pública, con el sufijo /mcp del resource indicator.
+        sync: false
       - key: AURON_MCP_SESSION_PATH
         value: /tmp/auron-mcp/session.json
       - key: AURON_RATE_LIMIT_MAX_CALLS

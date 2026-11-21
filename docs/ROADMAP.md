@@ -97,10 +97,10 @@
       deferred: backend `POST /audit/logs/create/` requires `IsSuperAdmin`,
       which no MCP operator identity has; needs a backend change to expose a
       per-user audit endpoint
-- [x] Distributed rate limiting and shared write state: `AURON_REDIS_URL`
-      enables Redis for rate limits, confirmation tokens and idempotency
-      (`tests/test_distributed_state.py`). OAuth still needs sticky sessions
-      while the SDK provider remains in memory.
+- [x] Distributed state: `AURON_REDIS_URL` enables Redis for rate limits,
+      confirmation tokens, idempotency (`tests/test_distributed_state.py`) and
+      OAuth codes/tokens across replicas (`tests/test_oauth_redis.py`). Without
+      Redis the in-memory OAuth provider still needs sticky sessions.
 - [x] Controlled-write tests (`tests/test_writes.py`: two-phase flow, single-use
       and expired tokens, payload-tamper mismatch, idempotent replay, failed
       writes don't poison idempotency, read-only guard, role boundaries,

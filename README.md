@@ -8,8 +8,9 @@ AURON REST API — the model can never steer them.
 
 ## What this is
 
-- **26 tools**: 11 lecturas simples, 4 compuestas, 6 escrituras de citas y 5
-  fiscales (incluye void sale). Las escrituras están deshabilitadas por defecto
+- **28 tools**: 11 lecturas simples, 4 compuestas, 8 de escrituras de citas
+  (6 escrituras + sus 2 previews de update/reschedule) y 5 fiscales (incluye
+  void sale). Las escrituras están deshabilitadas por defecto
   (`AURON_MCP_READ_ONLY=true`) y requieren preview + `confirmation_token` de un
   solo uso + `idempotency_key`.
 - **Real identity**: resolves the authenticated AURON principal via
@@ -24,15 +25,17 @@ AURON REST API — the model can never steer them.
 - **Error boundary**: nothing internal (messages, tokens, upstream bodies,
   stack traces) reaches the model — see `errors/normalize_error`.
 - **Per-call audit**: every tool call (success or denied) is written to an
-  append-only JSONL audit log and stdout.
+  append-only JSONL audit log and stderr (nunca stdout, que es el canal del
+  transporte stdio).
 - **Rate limiting**: per-(tenant, user, tool) sliding-window limiter checked
   before policy on every call. Con `AURON_REDIS_URL`, el estado compartido
-  (rate limit, confirmaciones e idempotencia) vive en Redis; sin esa variable
-  todo es en memoria y solo se admite una réplica. OAuth sigue en memoria.
+  (rate limit, confirmaciones, idempotencia **y OAuth**) vive en Redis; sin esa
+  variable todo es en memoria y solo se admite una réplica (sticky sessions).
 
 ## Tools
 
-El catálogo vigente tiene 26 tools; la fuente de verdad es `src/auron_mcp/server.py`
+El catálogo vigente tiene 28 tools (los 26 originales más los dos previews de
+MC-03); la fuente de verdad es `src/auron_mcp/server.py`
 y los contratos HTTP están en `src/auron_mcp/adapters/http.py`. Incluye lecturas
 simples y compuestas, seis escrituras de citas (`auron_create_appointment`,
 `auron_update_appointment`, `auron_cancel_appointment`, `auron_reschedule_appointment`,
