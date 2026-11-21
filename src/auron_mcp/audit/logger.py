@@ -1,4 +1,5 @@
 import json
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -26,16 +27,24 @@ class AuditSink(ABC):
         raise NotImplementedError
 
 
+def _stderr_sink(line: str) -> None:
+    """Default audit sink: stderr, never the stdio protocol channel."""
+    sys.stderr.write(line + "\n")
+    sys.stderr.flush()
+
+
 class AuditLogger(AuditSink):
-    """Append-only JSONL audit sink for MCP tool calls, plus stdout.
+    """Append-only JSONL audit sink for MCP tool calls, plus stderr.
 
     Records trace_id, user, tenant, tool, outcome and duration. Never logs
-    secrets, tokens, response bodies or internal stack traces.
+    secrets, tokens, response bodies or internal stack traces. Stdout belongs
+    to the MCP stdio transport, so the human-readable line goes to stderr
+    (or to the configured JSONL file).
     """
 
     def __init__(self, log_path: str | None = None, sink=None):
         self.log_path = Path(log_path) if log_path else None
-        self._sink = sink or print
+        self._sink = sink if sink is not None else _stderr_sink
         if self.log_path:
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -15,6 +15,7 @@ from typing import Any
 
 from .config import settings
 from .logging import logger
+from .secrets import redact
 
 _configured = False
 _tracer: Any = None
@@ -81,7 +82,12 @@ def span_tool(
         },
     )
     if error is not None:
-        span.record_exception(error)
+        # MC-05: record_exception() serializes str(error) AND its traceback into
+        # span events. Create a fresh exception from the redacted message so the
+        # original secret cannot leak into OTEL; keep the real type as a safe
+        # attribute for triage.
+        safe_error = RuntimeError(redact(str(error)))
+        span.record_exception(safe_error, attributes={"mcp.error_type": type(error).__name__})
         span.set_status(Status(StatusCode.ERROR))
     else:
         span.set_status(Status(StatusCode.OK))

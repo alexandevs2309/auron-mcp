@@ -21,6 +21,7 @@ Spec: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/
 """
 
 import base64
+import hmac
 import json
 import re
 from typing import Any
@@ -238,10 +239,11 @@ class StreamableHTTPValidationMiddleware:
 
 
 class BearerTokenMiddleware:
-    """Optional bearer-token auth for the MCP endpoint.
+    """Mandatory bearer-token auth for the MCP endpoint.
 
-    The AURON session the server uses is configured out-of-band; this protects
-    the transport itself when the endpoint is reachable beyond localhost.
+    Used when no OAuth token verifier is configured. An empty configured token
+    rejects every request (fail closed) instead of leaving the tools endpoint
+    anonymous; ``/healthz`` is installed outside this middleware.
     """
 
     def __init__(self, app: Any, token: str) -> None:
@@ -254,8 +256,8 @@ class BearerTokenMiddleware:
             return
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
         authorization = headers.get("authorization", "")
-        expected = f"Bearer {self.token}"
-        if authorization != expected:
+        expected = f"Bearer {self.token}" if self.token else ""
+        if not self.token or not hmac.compare_digest(authorization, expected):
             await send(
                 {
                     "type": "http.response.start",
@@ -389,7 +391,12 @@ def build_app(
     if auth is not None:
         wrapped = AuthChallengeMiddleware(wrapped, auth.required_scopes or [])
     wrapped = StreamableHTTPValidationMiddleware(wrapped)
-    if settings.http_bearer_token and token_verifier is None:
+    if token_verifier is None:
+        # MC-10: no OAuth verifier means the static bearer token is the only
+        # transport auth. Install the middleware even when it is empty so an
+        # unconfigured deployment fails closed with 401 instead of exposing
+        # tools anonymously. OAuth deployments are already bearer-protected by
+        # the SDK's RequireAuthMiddleware.
         wrapped = BearerTokenMiddleware(wrapped, settings.http_bearer_token)
     wrapped = HealthEndpointMiddleware(wrapped)
     return wrapped

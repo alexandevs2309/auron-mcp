@@ -13,6 +13,7 @@ os.environ["AURON_ADAPTER"] = "mock"
 import pytest
 from mcp.server.transport_security import TransportSecuritySettings
 
+from auron_mcp.config import settings
 from auron_mcp.http_app import (
     StreamableHTTPValidationMiddleware,
     _decode_header_value,
@@ -234,6 +235,32 @@ def test_bearer_token_middleware_enforces_auth():
             headers={"Authorization": "Bearer sekret"},
         )
         assert response.status_code != 401
+
+
+def test_build_app_requires_bearer_without_oauth():
+    """MC-10: tools must return 401 with no bearer; /healthz stays public."""
+    from starlette.testclient import TestClient
+
+    original = settings.http_bearer_token
+    object.__setattr__(settings, "http_bearer_token", "")
+    try:
+        app = build_app(transport_security=_security())
+    finally:
+        object.__setattr__(settings, "http_bearer_token", original)
+
+    with TestClient(app) as client:
+        assert client.get("/healthz").status_code == 200
+        response = client.post(
+            "/mcp", content=json.dumps(MODERN_TOOLS_LIST), headers=_pv_headers()
+        )
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == -32001
+        empty_bearer = client.post(
+            "/mcp",
+            content=json.dumps(MODERN_TOOLS_LIST),
+            headers={**_pv_headers(), "Authorization": "Bearer "},
+        )
+        assert empty_bearer.status_code == 401
 
 
 def test_build_app_returns_callable():
