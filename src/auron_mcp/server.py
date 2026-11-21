@@ -14,11 +14,17 @@ from .audit import AuditLogger
 from .auth import IdentityProvider, IdentityUnavailableError
 from .config import settings
 from .context import new_context, new_trace_id
-from .errors import ConfirmationError, WriteDisabledError, normalize_error
+from .errors import (
+    ConfirmationError,
+    SharedStateUnavailableError,
+    WriteDisabledError,
+    normalize_error,
+)
 from .logging import logger
 from .policy import AuthorizationError, PolicyEngine
-from .ratelimit import RateLimiter, RateLimitError
+from .ratelimit import InMemoryBackend, RateLimiter, RateLimitError, RedisBackend
 from .tools import AuronTools
+from .writes import RedisConfirmationTokenStore, RedisIdempotencyStore
 
 _KNOWN_EXCEPTIONS = (
     AuthorizationError,
@@ -27,6 +33,7 @@ _KNOWN_EXCEPTIONS = (
     AdapterError,
     WriteDisabledError,
     ConfirmationError,
+    SharedStateUnavailableError,
 )
 
 
@@ -43,6 +50,41 @@ def build_adapter():
     return MockAuronAdapter()
 
 
+def build_rate_limiter() -> RateLimiter:
+    backend = (
+        RedisBackend(
+            settings.redis_url,
+            on_error=settings.redis_on_error,
+            timeout_seconds=settings.redis_timeout_seconds,
+        )
+        if settings.redis_url
+        else InMemoryBackend()
+    )
+    return RateLimiter(
+        max_calls=settings.rate_limit_max_calls,
+        window_seconds=settings.rate_limit_window_seconds,
+        backend=backend,
+    )
+
+
+def build_write_stores() -> tuple[Any | None, Any | None]:
+    """Redis-backed confirmation/idempotency stores when AURON_REDIS_URL is set."""
+    if not settings.redis_url:
+        return None, None
+    return (
+        RedisConfirmationTokenStore(
+            settings.redis_url,
+            ttl_seconds=settings.confirmation_ttl_seconds,
+            timeout_seconds=settings.redis_timeout_seconds,
+        ),
+        RedisIdempotencyStore(
+            settings.redis_url,
+            ttl_seconds=settings.idempotency_ttl_seconds,
+            timeout_seconds=settings.redis_timeout_seconds,
+        ),
+    )
+
+
 adapter = build_adapter()
 identity_provider = IdentityProvider(
     adapter,
@@ -51,11 +93,16 @@ identity_provider = IdentityProvider(
 )
 policy = PolicyEngine(allow_superuser_without_tenant=settings.allow_superuser_without_tenant)
 audit = AuditLogger(settings.audit_log_path or None)
-rate_limiter = RateLimiter(
-    max_calls=settings.rate_limit_max_calls,
-    window_seconds=settings.rate_limit_window_seconds,
+rate_limiter = build_rate_limiter()
+confirmations, idempotency = build_write_stores()
+tools = AuronTools(
+    adapter,
+    policy,
+    audit,
+    rate_limiter,
+    confirmations=confirmations,
+    idempotency=idempotency,
 )
-tools = AuronTools(adapter, policy, audit, rate_limiter)
 
 mcp = MCPServer(settings.name)
 
@@ -283,22 +330,57 @@ async def auron_cancel_appointment(
     )
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+async def auron_preview_update_appointment(
+    appointment_id: str, changes: dict, ctx: Context | None = None
+) -> dict:
+    """MC-03: preview a low-impact appointment update and obtain the single-use
+    `confirmation_token` required by `auron_update_appointment`. No write occurs.
+    """
+    return await _safe(
+        _with_context(
+            lambda c: tools.preview_update_appointment(c, appointment_id, changes), ctx
+        )
+    )
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_update_appointment(
     appointment_id: str,
     changes: dict,
     idempotency_key: str,
+    confirmation_token: str,
     ctx: Context | None = None,
 ) -> dict:
     """Update low-impact appointment fields (service, branch, description).
-    No confirmation required. Provide an idempotency_key for safe retries.
+
+    Phase 2: requires the token from `auron_preview_update_appointment` plus a
+    client-generated `idempotency_key`. Replays return the original response.
     """
     return await _safe(
         _with_context(
             lambda c: tools.update_appointment(
-                c, appointment_id, changes, idempotency_key=idempotency_key
+                c,
+                appointment_id,
+                changes,
+                idempotency_key=idempotency_key,
+                confirmation_token=confirmation_token,
             ),
             ctx,
+        )
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+async def auron_preview_reschedule_appointment(
+    appointment_id: str, new_datetime: str, ctx: Context | None = None
+) -> dict:
+    """MC-03: preview a reschedule and obtain the single-use `confirmation_token`
+    required by `auron_reschedule_appointment`. No write occurs.
+    """
+    return await _safe(
+        _with_context(
+            lambda c: tools.preview_reschedule_appointment(c, appointment_id, new_datetime), ctx
         )
     )
 
@@ -308,15 +390,22 @@ async def auron_reschedule_appointment(
     appointment_id: str,
     new_datetime: str,
     idempotency_key: str,
+    confirmation_token: str,
     ctx: Context | None = None,
 ) -> dict:
-    """Move an appointment to a new datetime via the backend's reschedule
-    endpoint. No confirmation required. Use an idempotency_key for retries.
+    """Move an appointment via the backend's standalone reschedule endpoint.
+
+    Phase 2: requires the token from `auron_preview_reschedule_appointment` plus
+    a client-generated `idempotency_key`.
     """
     return await _safe(
         _with_context(
             lambda c: tools.reschedule_appointment(
-                c, appointment_id, new_datetime, idempotency_key=idempotency_key
+                c,
+                appointment_id,
+                new_datetime,
+                idempotency_key=idempotency_key,
+                confirmation_token=confirmation_token,
             ),
             ctx,
         )
@@ -336,8 +425,9 @@ async def auron_ncf_sequences(ctx: Context | None = None) -> dict:
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_fiscal_summary(ctx: Context | None = None) -> dict:
-    """Today's fiscal summary for the authenticated AURON tenant: sales count
-    by NCF type, ITBIS and Propina totals, voided/refunded counts.
+    """Fiscal summary for the authenticated AURON tenant (accumulated, not
+    per-day): sales count by NCF type, taxable/exempt totals, ITBIS and
+    voided/refunded counts. Propina is not exposed by the backend.
     """
     return await _safe(_with_context(tools.fiscal_summary, ctx))
 

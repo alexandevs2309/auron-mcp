@@ -126,6 +126,16 @@ def _post(client, body, *, method="tools/list", name=None, token=None):
     return client.post("/mcp", content=content, headers=headers)
 
 
+def test_healthz_is_public_and_requires_no_mcp_headers(app):
+    from starlette.testclient import TestClient
+
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "service": "auron-mcp"}
+        assert client.post("/healthz", json={}).status_code == 405
+
+
 def test_oversized_body_rejected_413_before_buffering(app):
     from starlette.testclient import TestClient
 

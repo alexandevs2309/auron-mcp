@@ -20,6 +20,7 @@ from auron_mcp import otel
 from auron_mcp.adapters.mock import MockAuronAdapter
 from auron_mcp.audit import AuditLogger
 from auron_mcp.auth import AuronIdentity
+from auron_mcp.config import settings
 from auron_mcp.context import new_context
 from auron_mcp.policy import PolicyEngine
 from auron_mcp.policy.roles import permissions_for_role
@@ -91,6 +92,34 @@ def test_span_tool_records_error_status(monkeypatch, exporter):
     span = spans[0]
     assert span.status.status_code == StatusCode.ERROR
     assert any(event.name == "exception" for event in span.events)
+
+
+def test_span_exception_message_is_redacted(monkeypatch, exporter):
+    """MC-05: OTEL exception events must not carry configured secrets."""
+    in_memory, tracer = exporter
+    monkeypatch.setattr(otel, "_tracer", tracer)
+    original = settings.http_bearer_token
+    object.__setattr__(settings, "http_bearer_token", "super-secret-token")
+    try:
+        otel.span_tool(
+            "sales.summary.read",
+            "trace-redact",
+            user_id="u1",
+            tenant_id="t1",
+            role="CLIENT_ADMIN",
+            outcome="upstream_error",
+            duration_ms=7,
+            error=RuntimeError("upstream said super-secret-token"),
+        )
+    finally:
+        object.__setattr__(settings, "http_bearer_token", original)
+
+    events = in_memory.get_finished_spans()[0].events
+    assert len(events) == 1
+    attributes = dict(events[0].attributes or {})
+    assert "super-secret-token" not in repr(attributes)
+    assert "[REDACTED]" in attributes["exception.message"]
+    assert attributes["mcp.error_type"] == "RuntimeError"
 
 
 @pytest.mark.asyncio

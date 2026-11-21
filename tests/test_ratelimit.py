@@ -27,3 +27,12 @@ def test_limits_are_isolated_per_tool():
     limiter = RateLimiter(max_calls=1, window_seconds=60)
     limiter.check("u1", "auron_sales_summary")
     limiter.check("u1", "auron_clients_search")  # different tool, own bucket
+
+
+def test_limits_are_isolated_per_tenant():
+    """ADR-001: two businesses never share a rate-limit bucket."""
+    limiter = RateLimiter(max_calls=1, window_seconds=60)
+    limiter.check("u1", "auron_sales_summary", tenant_id="tenant-a")
+    limiter.check("u1", "auron_sales_summary", tenant_id="tenant-b")
+    with pytest.raises(RateLimitError):
+        limiter.check("u1", "auron_sales_summary", tenant_id="tenant-a")

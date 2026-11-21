@@ -155,12 +155,11 @@ class MockAuronAdapter(AuronAdapter):
 
     async def fiscal_summary(self) -> dict[str, Any]:
         return {
-            "date": "2026-08-17",
+            "period": "all_time",
             "total_sales": 0,
             "total_revenue": "0.00",
             "sales_by_ncf_type": {},
             "total_itbis": "0.00",
-            "total_propina": "0.00",
             "voided_sales": 0,
             "refunded_sales": 0,
             "status": "mock",

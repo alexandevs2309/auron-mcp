@@ -30,7 +30,11 @@ class AuronAdapter(ABC):
 
     @abstractmethod
     async def auth_login(self, email: str, password: str, subdomain: str | None) -> dict[str, Any]:
-        """POST /api/auth/login/ -> sets auth cookies."""
+        """POST /api/auth/login/ -> sets auth cookies.
+
+        `subdomain` is sent as `tenant_subdomain`, the field the backend's
+        LoginSerializer actually reads.
+        """
 
     @abstractmethod
     async def tenant_current(self) -> dict[str, Any]:
@@ -112,10 +116,10 @@ class AuronAdapter(ABC):
     async def reschedule_appointment(
         self, appointment_id: str, new_datetime: str
     ) -> dict[str, Any]:
-        """POST /api/appointments/appointments/{id}/reschedule/."""
+        """POST /api/appointments/{id}/reschedule/ (standalone view, not a ViewSet action)."""
 
     # --- fiscal reads (M3: ECF / NCF) ------------------------------------
-    # These read the backend's existing NCF sequences and sale fiscal data.
+    # These read the backend's existing NCF sequences and fiscal report.
     # DGII e-CF submission is NOT yet in the backend; when it is, the
     # corresponding write methods (submit_ecf, ecf_status) will be added.
     @abstractmethod
@@ -124,7 +128,11 @@ class AuronAdapter(ABC):
 
     @abstractmethod
     async def fiscal_summary(self) -> dict[str, Any]:
-        """GET /api/pos/summary/daily/ — today's fiscal summary (NCF types, totals)."""
+        """GET /api/reports/fiscal/ — NCF types, ITBIS and voided/refunded totals.
+
+        Accumulated for the tenant, not per-day. Propina is not exposed by the
+        backend, so the normalized result has no `total_propina` key.
+        """
 
     @abstractmethod
     async def sale_fiscal_detail(self, sale_id: str) -> dict[str, Any]:

@@ -19,7 +19,7 @@ from auron_mcp.config import settings
 from auron_mcp.context import new_context, new_trace_id
 from auron_mcp.policy.roles import permissions_for_role
 from auron_mcp.tools import AuronTools
-from auron_mcp.writes import ConfirmationTokenStore
+from auron_mcp.writes import ConfirmationTokenStore, IdempotencyStore
 
 PAYLOAD = {
     "client": 1,
@@ -121,6 +121,22 @@ async def test_expired_confirmation_token_is_rejected():
     assert store.consume(token, "create_appointment", {"a": 1}) == "expired"
 
 
+def test_confirmation_token_is_bound_to_tenant():
+    """ADR-001: the same payload in another tenant cannot consume the token."""
+    store = ConfirmationTokenStore()
+    token = store.issue("void_sale", {"sale_id": "1"}, scope="tenant-a")
+    assert store.consume(token, "void_sale", {"sale_id": "1"}, scope="tenant-b") == "mismatch"
+    second = store.issue("void_sale", {"sale_id": "1"}, scope="tenant-a")
+    assert store.consume(second, "void_sale", {"sale_id": "1"}, scope="tenant-a") == "ok"
+
+
+def test_idempotency_is_bound_to_tenant():
+    store = IdempotencyStore()
+    store.put("key-shared", {"status": "ok"}, scope="tenant-a")
+    assert store.get("key-shared", scope="tenant-b") is None
+    assert store.get("key-shared", scope="tenant-a") == {"status": "ok"}
+
+
 @pytest.mark.asyncio
 async def test_write_without_token_is_rejected(auth_admin):
     result = await server.auron_create_appointment(
@@ -145,11 +161,70 @@ async def test_idempotency_replay_returns_original_result(auth_admin):
 
 
 @pytest.mark.asyncio
+async def test_replay_same_token_and_key_is_idempotent(auth_admin):
+    """MC-02: repetir la confirmación exacta (mismo token y misma clave) debe ser
+    un replay idempotente, no `confirmation_unknown`."""
+    count_before = len(server.tools.adapter._appointments)
+    preview = await server.auron_preview_create_appointment(payload=PAYLOAD)
+    token = preview["confirmation_token"]
+    first = await server.auron_create_appointment(
+        payload=PAYLOAD, idempotency_key="key-mc02-replay", confirmation_token=token
+    )
+    assert first["status"] == "scheduled"
+    assert len(server.tools.adapter._appointments) == count_before + 1
+
+    second = await server.auron_create_appointment(
+        payload=PAYLOAD, idempotency_key="key-mc02-replay", confirmation_token=token
+    )
+    assert "error" not in second
+    assert second == first
+    assert len(server.tools.adapter._appointments) == count_before + 1
+
+
+@pytest.mark.asyncio
+async def test_idempotency_scope_includes_user_within_tenant(auth_admin, monkeypatch):
+    """MC-01: dos usuarios del mismo tenant no deben compartir registros de
+    idempotencia; la misma clave debe producir dos escrituras reales."""
+    count_before = len(server.tools.adapter._appointments)
+    preview_a = await server.auron_preview_create_appointment(payload=PAYLOAD)
+    created_a = await server.auron_create_appointment(
+        payload=PAYLOAD,
+        idempotency_key="key-mc01-shared",
+        confirmation_token=preview_a["confirmation_token"],
+    )
+    assert created_a["status"] == "scheduled"
+
+    identity_b = AuronIdentity(
+        user_id="u-writer-b",
+        email="writer-b@auron.test",
+        tenant_id="t1",
+        role="CLIENT_ADMIN",
+        permissions=permissions_for_role("CLIENT_ADMIN"),
+    )
+    monkeypatch.setattr(server.identity_provider, "resolve", lambda: _resolve(identity_b))
+
+    preview_b = await server.auron_preview_create_appointment(payload=PAYLOAD)
+    created_b = await server.auron_create_appointment(
+        payload=PAYLOAD,
+        idempotency_key="key-mc01-shared",
+        confirmation_token=preview_b["confirmation_token"],
+    )
+    # Sin el fix, B recibe la respuesta cacheada de A por compartir tenant.
+    assert "error" not in created_b
+    assert created_b["id"] != created_a["id"]
+    assert len(server.tools.adapter._appointments) == count_before + 2
+
+
+@pytest.mark.asyncio
 async def test_failed_write_does_not_poison_idempotency(auth_admin):
+    preview = await server.auron_preview_update_appointment(
+        appointment_id="99999", changes={"service": 1}
+    )
     missing = await server.auron_update_appointment(
         appointment_id="99999",
         changes={"service": 1},
         idempotency_key="key-poison",
+        confirmation_token=preview["confirmation_token"],
     )
     assert missing["error"] == "not_found"
     created = await _create("key-poison")
@@ -208,20 +283,28 @@ async def test_cancel_flow_requires_confirmation(auth_admin):
 
 
 @pytest.mark.asyncio
-async def test_update_and_reschedule_need_no_confirmation(auth_admin):
+async def test_update_and_reschedule_require_confirmation(auth_admin):
     created = await _create("key-ur-1")
     appointment_id = created["id"]
+    update_preview = await server.auron_preview_update_appointment(
+        appointment_id=appointment_id, changes={"service": 7, "branch": 9}
+    )
     updated = await server.auron_update_appointment(
         appointment_id=appointment_id,
         changes={"service": 7, "branch": 9},
         idempotency_key="key-ur-2",
+        confirmation_token=update_preview["confirmation_token"],
     )
     assert updated["service"] == 7
     assert updated["branch"] == 9
+    reschedule_preview = await server.auron_preview_reschedule_appointment(
+        appointment_id=appointment_id, new_datetime="2026-08-21T12:00:00Z"
+    )
     rescheduled = await server.auron_reschedule_appointment(
         appointment_id=appointment_id,
         new_datetime="2026-08-21T12:00:00Z",
         idempotency_key="key-ur-3",
+        confirmation_token=reschedule_preview["confirmation_token"],
     )
     assert rescheduled["date_time"] == "2026-08-21T12:00:00Z"
     assert rescheduled["status"] == "scheduled"
@@ -259,10 +342,14 @@ async def test_cashier_role_can_write(auth_admin, monkeypatch):
     monkeypatch.setattr(server.identity_provider, "resolve", lambda: _resolve(identity))
     created = await _create("key-cashier-1")
     assert created["status"] == "scheduled"
+    reschedule_preview = await server.auron_preview_reschedule_appointment(
+        appointment_id=created["id"], new_datetime="2026-08-22T09:00:00Z"
+    )
     rescheduled = await server.auron_reschedule_appointment(
         appointment_id=created["id"],
         new_datetime="2026-08-22T09:00:00Z",
         idempotency_key="key-cashier-2",
+        confirmation_token=reschedule_preview["confirmation_token"],
     )
     assert rescheduled["date_time"] == "2026-08-22T09:00:00Z"
     cancelled = await server.auron_cancel_appointment(

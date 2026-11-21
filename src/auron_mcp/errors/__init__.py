@@ -3,6 +3,7 @@ from ..auth.provider import IdentityUnavailableError
 from ..policy import AuthorizationError
 from ..ratelimit import RateLimitError
 from ..secrets import redact
+from ..writes import SharedStateUnavailableError
 
 
 class WriteDisabledError(RuntimeError):
@@ -45,6 +46,8 @@ def normalize_error(exc: Exception) -> dict:
             "error": "read_only",
             "detail": "Server is in read-only mode (AURON_MCP_READ_ONLY=true)",
         }
+    if isinstance(exc, SharedStateUnavailableError):
+        return {"error": "state_unavailable", "detail": "Shared state is unavailable"}
     if isinstance(exc, ConfirmationError):
         reason = exc.reason
         message = {

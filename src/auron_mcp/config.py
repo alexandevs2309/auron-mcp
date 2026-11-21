@@ -23,6 +23,9 @@ class Settings:
     audit_log_path: str = ""
     rate_limit_max_calls: int = 30
     rate_limit_window_seconds: float = 60.0
+    redis_url: str = ""
+    redis_on_error: str = "closed"
+    redis_timeout_seconds: float = 1.0
     http_timeout_seconds: float = 15.0
     identity_cache_ttl: float = 300.0
     allow_superuser_without_tenant: bool = False
@@ -60,6 +63,9 @@ class Settings:
             audit_log_path=env.get("AURON_AUDIT_LOG_PATH", ""),
             rate_limit_max_calls=int(env.get("AURON_RATE_LIMIT_MAX_CALLS", "30")),
             rate_limit_window_seconds=float(env.get("AURON_RATE_LIMIT_WINDOW_SECONDS", "60")),
+            redis_url=env.get("AURON_REDIS_URL", "").strip(),
+            redis_on_error=env.get("AURON_REDIS_ON_ERROR", "closed").strip().lower(),
+            redis_timeout_seconds=float(env.get("AURON_REDIS_TIMEOUT_SECONDS", "1")),
             http_timeout_seconds=float(env.get("AURON_HTTP_TIMEOUT_SECONDS", "15")),
             identity_cache_ttl=float(env.get("AURON_IDENTITY_CACHE_TTL", "300")),
             allow_superuser_without_tenant=(

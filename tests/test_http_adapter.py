@@ -1,3 +1,5 @@
+import json
+
 import httpx2 as httpx
 import pytest
 
@@ -134,3 +136,114 @@ async def test_catalog_read_methods_hit_expected_paths(method, path):
     adapter = make_adapter(handler)
     await getattr(adapter, method)()
     assert seen["path"] == path
+
+
+@pytest.mark.asyncio
+async def test_reschedule_hits_canonical_backend_path():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": 42, "status": "scheduled"})
+
+    adapter = make_adapter(handler)
+    await adapter.reschedule_appointment("42", "2026-11-20T10:00:00")
+
+    assert seen["path"] == "/api/appointments/42/reschedule/"
+    assert seen["body"] == {"new_datetime": "2026-11-20T10:00:00"}
+
+
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("cancel_appointment", ("1/../2",)),
+        ("update_appointment", ("1%2F..", {"service": 1})),
+        ("reschedule_appointment", ("1?tenant=other", "2026-11-20T10:00:00")),
+        ("sale_fiscal_detail", ("../../pos/sales",)),
+        ("void_sale", ("1#fragment",)),
+        ("employee_performance", ("bad id",)),
+    ],
+)
+@pytest.mark.asyncio
+async def test_invalid_ids_are_rejected_before_http(method, args):
+    """MC-06: IDs are validated before they can alter the URL structure."""
+    called = []
+
+    def handler(request):
+        called.append(request)
+        return httpx.Response(200, json={})
+
+    adapter = make_adapter(handler)
+    with pytest.raises(AdapterError) as exc_info:
+        await getattr(adapter, method)(*args)
+    assert exc_info.value.category == "invalid_id"
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_canonical_uuid_id_is_allowed():
+    seen = {}
+    identifier = "123e4567-e89b-12d3-a456-426614174000"
+
+    def handler(request):
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={"id": identifier})
+
+    adapter = make_adapter(handler)
+    await adapter.sale_fiscal_detail(identifier)
+    assert seen["path"] == f"/api/pos/sales/{identifier}/"
+
+
+@pytest.mark.asyncio
+async def test_login_sends_tenant_subdomain_not_subdomain():
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"user": {"email": "a@b.test"}})
+
+    adapter = make_adapter(handler)
+    await adapter.auth_login("a@b.test", "pw", "mi-negocio")
+
+    assert seen["body"]["tenant_subdomain"] == "mi-negocio"
+    assert "subdomain" not in seen["body"]
+
+
+@pytest.mark.asyncio
+async def test_fiscal_summary_uses_reports_endpoint_and_normalizes_payload():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        return httpx.Response(
+            200,
+            json={
+                "summary": {
+                    "taxable_sales_count": 2,
+                    "taxable_sales_total": 100.50,
+                    "exempt_sales_count": 1,
+                    "exempt_sales_total": 10.25,
+                    "itbis_amount": 13.50,
+                    "tax_rate": 0.18,
+                    "voided_count": 3,
+                    "refunded_count": 4,
+                },
+                "ncf_by_type": [
+                    {"ncf_type": "01", "count": 2, "total": 100.50},
+                ],
+            },
+        )
+
+    adapter = make_adapter(handler)
+    result = await adapter.fiscal_summary()
+
+    assert seen["path"] == "/api/reports/fiscal/"
+    assert result["total_sales"] == 3
+    assert result["total_revenue"] == "110.75"
+    assert result["total_itbis"] == "13.50"
+    assert result["sales_by_ncf_type"] == {"01": 2}
+    assert result["voided_sales"] == 3
+    assert result["refunded_sales"] == 4
+    # The backend exposes no propina: the adapter must not fabricate one.
+    assert "total_propina" not in result

@@ -134,7 +134,7 @@ async def test_tools_are_registered_on_the_mcp_server():
 
 @pytest.mark.asyncio
 async def test_all_tools_have_annotations():
-    """All 26 tools must expose the four MCP annotation fields as booleans."""
+    """All 28 tools must expose the four MCP annotation fields as booleans."""
     tools = await server.mcp.list_tools()
     tool_map = {t.name: t for t in tools}
 
@@ -159,7 +159,9 @@ async def test_all_tools_have_annotations():
         "auron_create_appointment",
         "auron_preview_cancel_appointment",
         "auron_cancel_appointment",
+        "auron_preview_update_appointment",
         "auron_update_appointment",
+        "auron_preview_reschedule_appointment",
         "auron_reschedule_appointment",
         "auron_ncf_sequences",
         "auron_fiscal_summary",
@@ -212,6 +214,8 @@ async def test_read_only_tools_have_correct_annotations():
         # Preview tools are also read-only (no side effects)
         "auron_preview_create_appointment",
         "auron_preview_cancel_appointment",
+        "auron_preview_update_appointment",
+        "auron_preview_reschedule_appointment",
         "auron_preview_void_sale",
     }
 

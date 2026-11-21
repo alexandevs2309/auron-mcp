@@ -34,12 +34,23 @@ En el dashboard de Render → tu servicio → **Environment** → agrega:
 ```
 AURON_API_BASE_URL=https://api-peluqueria-p25h.onrender.com
 AURON_API_TOKEN=tu-token-de-servicio-aqui
-AURON_MCP_READ_ONLY=false
+AURON_MCP_READ_ONLY=true   # cambiar a false solo tras revisar preview + confirmación
 AURON_MCP_OAUTH_ENABLED=true
 ```
 
 > **Nota**: `AURON_API_TOKEN` es un token de servicio que actúa como
 > identidad de fallback. Para uso real, necesitas OAuth PKCE (ver abajo).
+>
+> **Secreto OAuth (MC-08):** `render.yaml` declara
+> `AURON_MCP_OAUTH_CLIENT_SECRET` con `sync: false` y la anotación
+> `{env:AURON_MCP_OAUTH_CLIENT_SECRET}`. El valor se inyecta en el dashboard
+> (Environment → Secret Files/Environment Groups); **no se escribe aquí**.
+> `check_config()` rechaza el arranque si la variable falta o sigue siendo el
+> default `auron-mcp-client-secret`. Define también
+> `AURON_MCP_OAUTH_ISSUER_URL` y `AURON_MCP_OAUTH_RESOURCE_URL` con la URL
+> pública del servicio (por ejemplo `{env:AURON_MCP_PUBLIC_URL}` y
+> `{env:AURON_MCP_PUBLIC_URL}/mcp`) para que los metadata de OAuth no apiten
+> a `127.0.0.1`.
 
 ## Paso 4: Verificar
 
@@ -93,8 +104,14 @@ barberías, necesitas OAuth PKCE:
 | `AURON_ADAPTER` | `http` | Usar el backend real |
 | `AURON_API_BASE_URL` | `https://api-peluqueria-p25h.onrender.com` | URL del backend |
 | `AURON_API_TOKEN` | `(tu token)` | Token de servicio |
-| `AURON_MCP_READ_ONLY` | `false` | Permitir escrituras |
+| `AURON_MCP_READ_ONLY` | `true` | Default seguro; no cambiar hasta revisar el flujo de escrituras |
 | `AURON_MCP_OAUTH_ENABLED` | `true` | Habilitar OAuth |
+| `AURON_MCP_OAUTH_CLIENT_SECRET` | `{env:AURON_MCP_OAUTH_CLIENT_SECRET}` | Inyectar en el dashboard (`sync: false`); el default del código se rechaza al arrancar |
+| `AURON_MCP_OAUTH_ISSUER_URL` | `{env:AURON_MCP_PUBLIC_URL}` | URL pública del servicio, no `localhost` |
+| `AURON_MCP_OAUTH_RESOURCE_URL` | `{env:AURON_MCP_PUBLIC_URL}/mcp` | Resource indicator público |
 | `AURON_RATE_LIMIT_MAX_CALLS` | `60` | Límite de llamadas |
 | `AURON_RATE_LIMIT_WINDOW_SECONDS` | `60` | Ventana del rate limit |
+| `AURON_REDIS_URL` | `rediss://...` | Estado compartido (rate limit, confirmaciones e idempotencia). Vacío = en memoria, una sola réplica |
+| `AURON_REDIS_ON_ERROR` | `closed` | Si Redis falla: `closed` rechaza lecturas; `open` las permite. Las escrituras siempre fallan cerrado |
+| `AURON_REDIS_TIMEOUT_SECONDS` | `1` | Timeout de conexión/socket a Redis |
 | `AURON_HTTP_TIMEOUT_SECONDS` | `30` | Timeout del backend |

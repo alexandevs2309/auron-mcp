@@ -40,6 +40,12 @@ def _configured_secrets() -> set[str]:
         and settings.oauth_client_secret != SHIPPED_OAUTH_CLIENT_SECRET
     ):
         secrets.add(settings.oauth_client_secret)
+    if settings.redis_url:
+        from urllib.parse import urlsplit
+
+        password = urlsplit(settings.redis_url).password
+        if password:
+            secrets.add(password)
     return secrets
 
 
@@ -66,6 +72,15 @@ def validate_config(settings) -> list[str]:
 
     if settings.adapter == "http" and not settings.api_base_url:
         problems.append("AURON_API_BASE_URL is required when AURON_ADAPTER=http")
+
+    if settings.redis_url:
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(settings.redis_url)
+        if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
+            problems.append("AURON_REDIS_URL must be a redis:// or rediss:// URL with a host")
+        if settings.redis_on_error not in {"closed", "open"}:
+            problems.append("AURON_REDIS_ON_ERROR must be 'closed' or 'open'")
 
     return problems
 
