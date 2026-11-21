@@ -330,22 +330,57 @@ async def auron_cancel_appointment(
     )
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+async def auron_preview_update_appointment(
+    appointment_id: str, changes: dict, ctx: Context | None = None
+) -> dict:
+    """MC-03: preview a low-impact appointment update and obtain the single-use
+    `confirmation_token` required by `auron_update_appointment`. No write occurs.
+    """
+    return await _safe(
+        _with_context(
+            lambda c: tools.preview_update_appointment(c, appointment_id, changes), ctx
+        )
+    )
+
+
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True))
 async def auron_update_appointment(
     appointment_id: str,
     changes: dict,
     idempotency_key: str,
+    confirmation_token: str,
     ctx: Context | None = None,
 ) -> dict:
     """Update low-impact appointment fields (service, branch, description).
-    No confirmation required. Provide an idempotency_key for safe retries.
+
+    Phase 2: requires the token from `auron_preview_update_appointment` plus a
+    client-generated `idempotency_key`. Replays return the original response.
     """
     return await _safe(
         _with_context(
             lambda c: tools.update_appointment(
-                c, appointment_id, changes, idempotency_key=idempotency_key
+                c,
+                appointment_id,
+                changes,
+                idempotency_key=idempotency_key,
+                confirmation_token=confirmation_token,
             ),
             ctx,
+        )
+    )
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=True))
+async def auron_preview_reschedule_appointment(
+    appointment_id: str, new_datetime: str, ctx: Context | None = None
+) -> dict:
+    """MC-03: preview a reschedule and obtain the single-use `confirmation_token`
+    required by `auron_reschedule_appointment`. No write occurs.
+    """
+    return await _safe(
+        _with_context(
+            lambda c: tools.preview_reschedule_appointment(c, appointment_id, new_datetime), ctx
         )
     )
 
@@ -355,15 +390,22 @@ async def auron_reschedule_appointment(
     appointment_id: str,
     new_datetime: str,
     idempotency_key: str,
+    confirmation_token: str,
     ctx: Context | None = None,
 ) -> dict:
-    """Move an appointment to a new datetime via the backend's reschedule
-    endpoint. No confirmation required. Use an idempotency_key for retries.
+    """Move an appointment via the backend's standalone reschedule endpoint.
+
+    Phase 2: requires the token from `auron_preview_reschedule_appointment` plus
+    a client-generated `idempotency_key`.
     """
     return await _safe(
         _with_context(
             lambda c: tools.reschedule_appointment(
-                c, appointment_id, new_datetime, idempotency_key=idempotency_key
+                c,
+                appointment_id,
+                new_datetime,
+                idempotency_key=idempotency_key,
+                confirmation_token=confirmation_token,
             ),
             ctx,
         )

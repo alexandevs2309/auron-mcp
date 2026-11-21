@@ -154,6 +154,47 @@ async def test_reschedule_hits_canonical_backend_path():
     assert seen["body"] == {"new_datetime": "2026-11-20T10:00:00"}
 
 
+@pytest.mark.parametrize(
+    ("method", "args"),
+    [
+        ("cancel_appointment", ("1/../2",)),
+        ("update_appointment", ("1%2F..", {"service": 1})),
+        ("reschedule_appointment", ("1?tenant=other", "2026-11-20T10:00:00")),
+        ("sale_fiscal_detail", ("../../pos/sales",)),
+        ("void_sale", ("1#fragment",)),
+        ("employee_performance", ("bad id",)),
+    ],
+)
+@pytest.mark.asyncio
+async def test_invalid_ids_are_rejected_before_http(method, args):
+    """MC-06: IDs are validated before they can alter the URL structure."""
+    called = []
+
+    def handler(request):
+        called.append(request)
+        return httpx.Response(200, json={})
+
+    adapter = make_adapter(handler)
+    with pytest.raises(AdapterError) as exc_info:
+        await getattr(adapter, method)(*args)
+    assert exc_info.value.category == "invalid_id"
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_canonical_uuid_id_is_allowed():
+    seen = {}
+    identifier = "123e4567-e89b-12d3-a456-426614174000"
+
+    def handler(request):
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={"id": identifier})
+
+    adapter = make_adapter(handler)
+    await adapter.sale_fiscal_detail(identifier)
+    assert seen["path"] == f"/api/pos/sales/{identifier}/"
+
+
 @pytest.mark.asyncio
 async def test_login_sends_tenant_subdomain_not_subdomain():
     seen = {}

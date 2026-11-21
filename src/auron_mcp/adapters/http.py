@@ -1,9 +1,31 @@
+import re
 from decimal import Decimal
 from typing import Any
 
 import httpx2 as httpx
 
 from .base import AdapterError, AuronAdapter
+
+_INT_ID = re.compile(r"^[1-9][0-9]*$")
+_UUID_ID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def _validated_id(value: str | int, field: str) -> str:
+    """Allow only positive integers or canonical UUIDs in URL paths/queries.
+
+    MC-06: the backend remains the authority for existence/authorization, but
+    a model-supplied value must never be able to change the URL structure
+    (``../``, ``?``, ``#``, encoded separators, etc.) before the request is sent.
+    The rejected value is never echoed back to the model.
+    """
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise AdapterError("invalid_id", f"Invalid {field}")
+    text = str(value)
+    if not (_INT_ID.fullmatch(text) or _UUID_ID.fullmatch(text)):
+        raise AdapterError("invalid_id", f"Invalid {field}")
+    return text
 
 
 class HttpAuronAdapter(AuronAdapter):
@@ -106,7 +128,7 @@ class HttpAuronAdapter(AuronAdapter):
     async def employee_performance(self, employee_id: str | None) -> dict[str, Any]:
         params: dict[str, Any] = {}
         if employee_id:
-            params["employee_id"] = employee_id
+            params["employee_id"] = _validated_id(employee_id, "employee_id")
         return await self._get("/api/reports/employees/", **params)
 
     async def services_list(self) -> dict[str, Any]:
@@ -133,8 +155,9 @@ class HttpAuronAdapter(AuronAdapter):
         return self._decode(response, success_codes=(200, 201))
 
     async def cancel_appointment(self, appointment_id: str) -> dict[str, Any]:
+        identifier = _validated_id(appointment_id, "appointment_id")
         response = await self._patch(
-            f"/api/appointments/appointments/{appointment_id}/",
+            f"/api/appointments/appointments/{identifier}/",
             {"status": "cancelled"},
         )
         return self._decode(response)
@@ -142,16 +165,18 @@ class HttpAuronAdapter(AuronAdapter):
     async def update_appointment(
         self, appointment_id: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        response = await self._patch(f"/api/appointments/appointments/{appointment_id}/", payload)
+        identifier = _validated_id(appointment_id, "appointment_id")
+        response = await self._patch(f"/api/appointments/appointments/{identifier}/", payload)
         return self._decode(response)
 
     async def reschedule_appointment(
         self, appointment_id: str, new_datetime: str
     ) -> dict[str, Any]:
+        identifier = _validated_id(appointment_id, "appointment_id")
         # Standalone view at /api/appointments/<pk>/reschedule/ (NOT a ViewSet
         # action, so there is no duplicated `appointments/` path segment).
         response = await self._post(
-            f"/api/appointments/{appointment_id}/reschedule/",
+            f"/api/appointments/{identifier}/reschedule/",
             {"new_datetime": new_datetime},
         )
         return self._decode(response)
@@ -187,10 +212,12 @@ class HttpAuronAdapter(AuronAdapter):
         }
 
     async def sale_fiscal_detail(self, sale_id: str) -> dict[str, Any]:
-        return await self._get(f"/api/pos/sales/{sale_id}/")
+        identifier = _validated_id(sale_id, "sale_id")
+        return await self._get(f"/api/pos/sales/{identifier}/")
 
     async def void_sale(self, sale_id: str) -> dict[str, Any]:
-        response = await self._patch(f"/api/pos/sales/{sale_id}/", {"status": "void"})
+        identifier = _validated_id(sale_id, "sale_id")
+        response = await self._patch(f"/api/pos/sales/{identifier}/", {"status": "void"})
         return self._decode(response)
 
     # --- plumbing --------------------------------------------------------

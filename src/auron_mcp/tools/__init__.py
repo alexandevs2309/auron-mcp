@@ -89,8 +89,20 @@ class AuronTools:
 
     @staticmethod
     def _scope(ctx: RequestContext) -> str:
-        """Tenant scope for rate limits and controlled-write state (ADR-001)."""
+        """Tenant scope for rate limits (ADR-001)."""
         return ctx.identity.tenant_id or ""
+
+    @staticmethod
+    def _write_scope(ctx: RequestContext) -> str:
+        """Scope for controlled-write state: (tenant, user).
+
+        MC-01: idempotency keys and confirmation tokens are client-supplied.
+        Keying them by tenant alone let two users of the same business reuse
+        each other's records. Including the authenticated user id keeps one
+        user's replay from silently returning another user's response, while
+        the tenant component preserves ADR-001 cross-tenant isolation.
+        """
+        return f"{ctx.identity.tenant_id or ''}|{ctx.identity.user_id}"
 
     async def _guard(self, ctx: RequestContext, tool: str, permission) -> None:
         if self.rate_limiter is not None:
@@ -171,7 +183,20 @@ class AuronTools:
             if settings.read_only:
                 raise WriteDisabledError()
             await self._guard(ctx, tool, permission)
-            scope = self._scope(ctx)
+            scope = self._write_scope(ctx)
+            # MC-02: comprobar idempotencia ANTES de consumir el token. Un reintento
+            # legítimo repite el mismo token y la misma clave; si se consume primero,
+            # el token ya no existe y el replay devuelve `confirmation_unknown` en
+            # lugar de la respuesta original. La comprobación sigue siendo segura:
+            # los registros están acotados a (tenant, usuario) por MC-01 y devolver
+            # una respuesta cacheada no produce ningún efecto nuevo.
+            if idempotency_key is not None:
+                existing = await _maybe_await(
+                    self.idempotency.get(idempotency_key, scope=scope)
+                )
+                if existing is not None:
+                    self._record(ctx, tool, "idempotent", int((time.monotonic() - started) * 1000))
+                    return existing
             if confirmation_token is not None:
                 result = await _maybe_await(
                     self.confirmations.consume(
@@ -180,13 +205,6 @@ class AuronTools:
                 )
                 if result != "ok":
                     raise ConfirmationError(result)
-            if idempotency_key is not None:
-                existing = await _maybe_await(
-                    self.idempotency.get(idempotency_key, scope=scope)
-                )
-                if existing is not None:
-                    self._record(ctx, tool, "idempotent", int((time.monotonic() - started) * 1000))
-                    return existing
             try:
                 result = await fn()
             except Exception:
@@ -372,7 +390,7 @@ class AuronTools:
 
         async def _preview():
             token = await _maybe_await(
-                self.confirmations.issue("create_appointment", payload, scope=self._scope(ctx))
+                self.confirmations.issue("create_appointment", payload, scope=self._write_scope(ctx))
             )
             return {
                 "operation": "create_appointment",
@@ -380,7 +398,7 @@ class AuronTools:
                 "effects": "Creates a new appointment in the authenticated tenant",
                 "confirmation_token": token,
                 "ttl_seconds": self.confirmations.ttl_seconds,
-                "payload_hash": payload_hash(payload, self._scope(ctx)),
+                "payload_hash": payload_hash(payload, self._write_scope(ctx)),
             }
 
         return await self._write(
@@ -422,7 +440,7 @@ class AuronTools:
         async def _preview():
             payload = {"appointment_id": appointment_id}
             token = await _maybe_await(
-                self.confirmations.issue("cancel_appointment", payload, scope=self._scope(ctx))
+                self.confirmations.issue("cancel_appointment", payload, scope=self._write_scope(ctx))
             )
             return {
                 "operation": "cancel_appointment",
@@ -430,7 +448,7 @@ class AuronTools:
                 "effects": "Marks the appointment as cancelled (record is kept)",
                 "confirmation_token": token,
                 "ttl_seconds": self.confirmations.ttl_seconds,
-                "payload_hash": payload_hash(payload, self._scope(ctx)),
+                "payload_hash": payload_hash(payload, self._write_scope(ctx)),
             }
 
         return await self._write(
@@ -467,6 +485,35 @@ class AuronTools:
             confirmation_token=confirmation_token,
         )
 
+    async def preview_update_appointment(
+        self, ctx: RequestContext, appointment_id: str, changes: dict
+    ) -> dict:
+        """MC-03: phase 1 of a low-impact update: effect + single-use token."""
+        payload = {**changes, "appointment_id": appointment_id}
+
+        async def _preview():
+            token = await _maybe_await(
+                self.confirmations.issue("update_appointment", payload, scope=self._write_scope(ctx))
+            )
+            return {
+                "operation": "update_appointment",
+                "appointment_id": appointment_id,
+                "changes": changes,
+                "effects": "Updates the allowed low-impact fields of the appointment",
+                "confirmation_token": token,
+                "ttl_seconds": self.confirmations.ttl_seconds,
+                "payload_hash": payload_hash(payload, self._write_scope(ctx)),
+            }
+
+        return await self._write(
+            ctx,
+            "appointments.update.preview",
+            APPOINTMENTS_CHANGE,
+            _preview,
+            operation="update_appointment",
+            payload=payload,
+        )
+
     async def update_appointment(
         self,
         ctx: RequestContext,
@@ -474,13 +521,14 @@ class AuronTools:
         changes: dict,
         *,
         idempotency_key: str,
+        confirmation_token: str,
     ) -> dict:
-        """Low-impact field update (service/branch/description). No confirmation."""
+        """MC-03: phase 2 of a low-impact update; preview token is mandatory."""
 
         async def _update():
             return await self.adapter.update_appointment(appointment_id, changes)
 
-        payload = {"appointment_id": appointment_id, **changes}
+        payload = {**changes, "appointment_id": appointment_id}
         return await self._write(
             ctx,
             "appointments.update",
@@ -489,6 +537,38 @@ class AuronTools:
             operation="update_appointment",
             payload=payload,
             idempotency_key=idempotency_key,
+            confirmation_token=confirmation_token,
+        )
+
+    async def preview_reschedule_appointment(
+        self, ctx: RequestContext, appointment_id: str, new_datetime: str
+    ) -> dict:
+        """MC-03: phase 1 of a reschedule: effect + single-use token."""
+        payload = {"appointment_id": appointment_id, "new_datetime": new_datetime}
+
+        async def _preview():
+            token = await _maybe_await(
+                self.confirmations.issue(
+                    "reschedule_appointment", payload, scope=self._write_scope(ctx)
+                )
+            )
+            return {
+                "operation": "reschedule_appointment",
+                "appointment_id": appointment_id,
+                "new_datetime": new_datetime,
+                "effects": "Moves the appointment to the requested datetime",
+                "confirmation_token": token,
+                "ttl_seconds": self.confirmations.ttl_seconds,
+                "payload_hash": payload_hash(payload, self._write_scope(ctx)),
+            }
+
+        return await self._write(
+            ctx,
+            "appointments.reschedule.preview",
+            APPOINTMENTS_CHANGE,
+            _preview,
+            operation="reschedule_appointment",
+            payload=payload,
         )
 
     async def reschedule_appointment(
@@ -498,8 +578,9 @@ class AuronTools:
         new_datetime: str,
         *,
         idempotency_key: str,
+        confirmation_token: str,
     ) -> dict:
-        """Move an appointment to a new datetime via the dedicated endpoint."""
+        """MC-03: phase 2 of a reschedule; preview token is mandatory."""
 
         async def _reschedule():
             return await self.adapter.reschedule_appointment(appointment_id, new_datetime)
@@ -513,6 +594,7 @@ class AuronTools:
             operation="reschedule_appointment",
             payload=payload,
             idempotency_key=idempotency_key,
+            confirmation_token=confirmation_token,
         )
 
     # --- fiscal reads (M3: ECF / NCF) ------------------------------------
@@ -544,7 +626,7 @@ class AuronTools:
         async def _preview():
             payload = {"sale_id": sale_id}
             token = await _maybe_await(
-                self.confirmations.issue("void_sale", payload, scope=self._scope(ctx))
+                self.confirmations.issue("void_sale", payload, scope=self._write_scope(ctx))
             )
             return {
                 "operation": "void_sale",
@@ -552,7 +634,7 @@ class AuronTools:
                 "effects": "Sets sale status to void; NCF remains consumed per DGII rules",
                 "confirmation_token": token,
                 "ttl_seconds": self.confirmations.ttl_seconds,
-                "payload_hash": payload_hash(payload, self._scope(ctx)),
+                "payload_hash": payload_hash(payload, self._write_scope(ctx)),
             }
 
         return await self._write(
