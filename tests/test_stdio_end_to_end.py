@@ -13,20 +13,10 @@ os.environ["AURON_ADAPTER"] = "mock"
 import pytest
 from mcp import client
 
-if sys.platform == "win32":
-    SERVER_ARGS = [
-        os.path.join(
-            os.path.dirname(sys.executable),
-            "auron-mcp.exe",
-        )
-    ]
-else:
-    BIN = os.path.join(
-        os.path.dirname(__file__), "..", ".venv", "bin", "auron-mcp"
-    )
-    SERVER_ARGS = [os.path.abspath(BIN)]
-
-
+# El script de consola no siempre está en .venv (en CI se instala con pip en
+# el intérprete del runner). Usar el intérprete que ejecuta pytest funciona en
+# Windows, Linux y macOS, con venv, editable install o entorno global.
+SERVER_ARGS = [sys.executable, "-m", "auron_mcp.server"]
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -35,7 +25,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 async def test_stdio_session_calls_a_tool_and_resource():
     env = {**os.environ, "AURON_ADAPTER": "mock", "PYTHONPATH": os.path.join(PROJECT_ROOT, "src")}
     server_params = client.stdio.StdioServerParameters(
-        command=SERVER_ARGS[0], args=[], env=env, cwd=PROJECT_ROOT
+        command=SERVER_ARGS[0], args=SERVER_ARGS[1:], env=env, cwd=PROJECT_ROOT
     )
     async with (
         client.stdio.stdio_client(server_params) as (read, write),
